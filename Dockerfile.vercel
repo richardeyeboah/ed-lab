@@ -6,7 +6,7 @@ RUN mkdir out && javac --release 17 -d out src/*.java
 COPY data ./data
 RUN java -cp out EDProgram
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jdk
 WORKDIR /app
 COPY --from=build /app/out ./out
 COPY src ./src

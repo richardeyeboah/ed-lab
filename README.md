@@ -46,3 +46,11 @@ Follow the course rules on AI assistance. Add your own name/group details only i
 ## GitHub and deployment
 
 Repository: https://github.com/richardeyeboah/ed-lab (private). Vercel detects Dockerfile.vercel. Build-time verification runs the Java console scenarios before the container is published. The .runtime and out directories are excluded from Git and deployment.
+
+## Editable Java workspace
+
+The source panel uses Microsoft's Monaco Editor (MIT, bundled version 0.57.0), with a VS Code-style theme, Java highlighting, line numbers, folding, find, undo/redo and a command palette. The tabs navigate within the full editable file; switching tests does not replace your changes. Expand editor gives more space. Cmd+S or Save draft stores the current text in this browser. Download saves the edited file. Reset restores the original, with editor undo available.
+
+Compile & run test applies the current Java source. Errors appear below the editor with line markers. Keep the EDProgram class name and assignment method signatures so the display bridge can read the results. Selecting another test compiles edited code to restore its prerequisite state. The original source and repository are never overwritten by a visitor's draft.
+
+Edited code is compiled with annotation processing disabled, then executed in a separate, memory/time/output-limited Java 21 process. An execution policy permits reading only the request's temporary files, and denies network access, process execution, writes, environment access, and System.exit. Each request's temporary folder is removed afterwards. The deployed container includes the JDK for compilation. Verified: all ten edited-code scenarios; a changed name reflected in the UI; syntax-error diagnostics; draft reload/reset; denied file/network/process/exit attempts; timeout of an infinite loop.

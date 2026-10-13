@@ -30,6 +30,7 @@ public class WebsiteServer {
                 // All test requests are stateless. Each visitor supplies their own CSV;
                 // no uploaded dataset can change what another visitor sees.
                 String path=x.getRequestURI().getPath();
+                if(path.equals("/api/edit")){EditorExecution.handle(x);return;}
                 if(path.equals("/api/source")) {send(x,200,"text/plain",Files.readString(Path.of("src/EDProgram.java")));return;}
                 if(path.equals("/api/sample")) {send(x,200,"text/csv",Files.readString(Path.of("data/patients.csv")));return;}
                 if(path.equals("/api/state")) {send(x,200,"application/json",EDProgram.load(dataset).stateJson());return;}
@@ -68,8 +69,10 @@ public class WebsiteServer {
             Path file=WEB.resolve(x.getRequestURI().getPath().substring(1)).normalize();
             if(x.getRequestURI().getPath().equals("/"))file=WEB.resolve("index.html");
             if(!file.startsWith(WEB) || !Files.isRegularFile(file)){send(x,404,"text/plain","Not found");return;}
-            String name=file.toString();String type=name.endsWith(".css")?"text/css":name.endsWith(".js")?"application/javascript":"text/html";
-            send(x,200,type,Files.readString(file));
+            String name=file.toString();String type=name.endsWith(".css")?"text/css":name.endsWith(".js")?"application/javascript":name.endsWith(".ttf")?"font/ttf":name.endsWith(".woff")?"font/woff":name.endsWith(".json")?"application/json":name.endsWith(".html")?"text/html":"application/octet-stream";
+            byte[] bytes=Files.readAllBytes(file);
+            x.getResponseHeaders().set("Content-Type",type);
+            x.sendResponseHeaders(200,bytes.length);x.getResponseBody().write(bytes);x.close();
         });
         server.start();System.out.println("Open http://127.0.0.1:"+port+" — actual Java backend running. Ctrl+C stops it.");
     }

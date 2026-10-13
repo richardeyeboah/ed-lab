@@ -6,6 +6,66 @@ const levelColors = ['', '#d74842', '#db8633', '#d3ad28', '#416fc3', '#429965'];
 const escape = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let currentCsv='', source='', selected=1, beforeState=null, afterState=null, showingBefore=false, arrivalView=false, codeSection='test', activeRequest=0;
 const completed = new Set();
+let originalSource='', editor=null, decorations=[], expanded=false;
+const draftKey='ed-lab-java-draft-v1';
+function draftStatus(message) { $('draft-status').textContent=message; }
+function saveDraft() {
+ try{localStorage.setItem(draftKey,source);draftStatus('Draft saved in this browser');}
+ catch(e){notice('Browser storage is unavailable. Download your Java file to keep your changes.');}
+}
+function edited() {
+ source=editor?editor.getValue():$('editor-fallback').value;
+ $('dirty-dot').hidden=source===originalSource;completed.clear();buttons();
+ draftStatus(source===originalSource?'Original source':'Edited · compile to apply');
+ $('result').textContent='Code changed · run again';$('result').className='result';
+ if(editor)monaco.editor.setModelMarkers(editor.getModel(),'javac',[]);
+}
+async function initEditor() {
+ let draft;try{draft=localStorage.getItem(draftKey);}catch(e){}
+ if(draft)source=draft;
+ try {
+  await new Promise((resolve,reject)=>{
+   if(!window.require)return reject(Error('Editor loader unavailable.'));
+   require.config({paths:{vs:'/vendor/monaco/vs'}});
+   require(['vs/editor/editor.main'],resolve,reject);
+  });
+  monaco.editor.defineTheme('ed-vscode',{base:'vs-dark',inherit:true,rules:[],colors:{'editor.background':'#1e1e1e','editorLineNumber.foreground':'#858585','editor.lineHighlightBackground':'#272727'}});
+  editor=monaco.editor.create($('monaco-editor'),{value:source,language:'java',theme:'ed-vscode',automaticLayout:true,fontSize:13,fontFamily:'Menlo, Consolas, monospace',lineNumbers:'on',minimap:{enabled:false},wordWrap:'on',scrollBeyondLastLine:false,tabSize:4,insertSpaces:true,folding:true,bracketPairColorization:{enabled:true},padding:{top:12,bottom:12},ariaLabel:'Editable Java source',accessibilitySupport:'on'});
+  editor.onDidChangeModelContent(edited);
+  editor.onDidChangeCursorPosition(e=>$('cursor-position').textContent=`Ln ${e.position.lineNumber}, Col ${e.position.column}`);
+  editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KeyS,saveDraft);
+ }catch(e){
+  $('monaco-editor').hidden=true;$('editor-fallback').hidden=false;$('editor-fallback').value=source;
+  $('editor-fallback').oninput=edited;notice('The advanced editor could not load. You can still edit and run Java in the text editor.');
+ }
+ $('dirty-dot').hidden=source===originalSource;draftStatus(source===originalSource?'Original source':'Restored browser draft');
+}
+async function executeJava(mode,n) {
+ if(source===originalSource)return api(`/api/${mode==='run'?'run':'prepare'}?test=${n}`,{method:'POST',headers:{'Content-Type':'text/csv'},body:currentCsv});
+ const fields=new URLSearchParams({source,csv:currentCsv,test:String(n),mode});
+ return api('/api/edit',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:fields.toString()});
+}
+function compilerError(message) {
+ $('compiler-output').hidden=false;$('compiler-output').className='compiler-output';$('compiler-output').textContent=message;
+ if(!editor)return;
+ const markers=[];const pattern=/EDProgram\.java:(\d+): error: ([^\n]+)/g;let match;
+ while((match=pattern.exec(message)))markers.push({startLineNumber:Number(match[1]),endLineNumber:Number(match[1]),startColumn:1,endColumn:1000,message:match[2],severity:monaco.MarkerSeverity.Error});
+ monaco.editor.setModelMarkers(editor.getModel(),'javac',markers);
+ if(markers.length)editor.revealLineInCenter(markers[0].startLineNumber);
+}
+$('save-code').onclick=saveDraft;
+$('reset-code').onclick=()=>{
+ if(editor){editor.executeEdits('reset',[{range:editor.getModel().getFullModelRange(),text:originalSource}]);editor.pushUndoStop();}
+ else{$('editor-fallback').value=originalSource;edited();}
+ try{localStorage.removeItem(draftKey);}catch(e){}
+ $('compiler-output').hidden=true;selectTest(selected);
+};
+$('compile-code').onclick=()=>runTest();
+$('toggle-explorer').onclick=()=>{$('explorer').hidden=!$('explorer').hidden;editor?.layout();};
+$('open-source').onclick=()=>{codeSection='all';renderCode();editor?.focus();};
+$('editor-find').onclick=()=>editor?.getAction('actions.find').run();
+$('editor-commands').onclick=()=>editor?.getAction('editor.action.quickCommand').run();
+$('expand-editor').onclick=()=>{expanded=!expanded;$('editor-panel').classList.toggle('editor-expanded',expanded);$('expand-editor').textContent=expanded?'⤡':'⤢';$('expand-editor').setAttribute('aria-label',expanded?'Collapse editor':'Expand editor');editor?.layout();};
 function notice(message) { $('notice').textContent=message; $('notice').hidden=!message; }
 async function api(url,options) {
  const response=await fetch(url,options); const data=await response.json();
@@ -29,14 +89,14 @@ function codeRange() {
 }
 function renderCode() {
  const {lines,start,end}=codeRange();
- const shown=lines.slice(start,end);
- const indentation=Math.min(...shown.filter(l=>l.trim()).map(l=>l.match(/^ */)[0].length));
- const selectedStart=lines.findIndex(l=>l.includes(`// TEST ${selected}:`));
- const selectedEnd=lines.findIndex((l,i)=>i>selectedStart && (l.includes('// TEST ')||l.includes('default:')));
- $('code').innerHTML=lines.slice(start,end).map((line,i)=>`<span class="code-line ${codeSection==='test'||(start+i>=selectedStart&&start+i<selectedEnd)?'highlight':''}"><span class="line-number">${start+i+1}</span><span class="${line.trim().startsWith('//')?'code-comment':''}">${escape(line.slice(Number.isFinite(indentation)?indentation:0))}</span></span>`).join('');
- $('code-caption').textContent=codeSection==='test'?`Test ${selected} · ${titles[selected]} — actual Java code` : codeSection==='all'?'Full source · comments explain every operation':codeSection==='comparator'?'Severity → arrival time → sequence: FIFO within each level':'The heap, the fixed room array, and the patient lookup map';
+ if(editor) {
+  decorations=editor.deltaDecorations(decorations,codeSection==='all'?[]:[{range:new monaco.Range(start+1,1,Math.max(start+1,end),1),options:{isWholeLine:true,className:'test-code-highlight',linesDecorationsClassName:'test-code-gutter'}}]);
+  editor.revealLineInCenter(Math.max(1,start+1));
+ }
+ $('code-caption').textContent=codeSection==='test'?`Test ${selected} · ${titles[selected]} — edit the highlighted Java` : codeSection==='all'?'Full source · editable Java program':codeSection==='comparator'?'Severity → arrival time → sequence: edit the comparator':'The heap, room array, and lookup map';
  document.querySelectorAll('[data-section]').forEach(b=>b.classList.toggle('active',b.dataset.section===codeSection));
 }
+
 function patientCard(p) {
  return `<div class="patient" data-level="${p.level}" style="--level:${levelColors[p.level]}"><div class="patient-id">${escape(p.id)}<span class="badge">${p.level}</span></div><div class="patient-name">${escape(p.name)}</div><div class="patient-time">#${p.sequence} · ${new Date(p.arrival).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'})} UTC</div>${arrivalView?`<div class="status-tag">${escape(p.status)}</div>`:''}</div>`;
 }
@@ -57,29 +117,32 @@ function renderState() {
  $('priority-view').classList.toggle('active',!arrivalView);$('arrival-view').classList.toggle('active',arrivalView);
 }
 async function selectTest(n) {
- selected=n;const request=++activeRequest;showingBefore=true;beforeState=null;afterState=null;
+ selected=n;const request=++activeRequest;$('compile-code').disabled=true;showingBefore=true;beforeState=null;afterState=null;
  $('scenario-title').textContent=`${String(n).padStart(2,'0')} / ${titles[n]}`;
  $('explanation').textContent=descriptions[n];$('run').textContent=`▶ Run Test ${n}`;$('run').disabled=true;
  $('next').disabled=n===10;$('result').className='result';$('result').textContent='Preparing…';
  $('events').innerHTML='<p>Preparing the starting state in Java…</p>';$('log-label').textContent='Before this test';
  buttons();renderCode();notice('');
  try {
-  const state=await api(`/api/prepare?test=${n}`,{method:'POST',headers:{'Content-Type':'text/csv'},body:currentCsv});if(request!==activeRequest)return;
+  const state=await executeJava('prepare',n);if(request!==activeRequest)return;
   beforeState=state;afterState=state;renderState();$('result').textContent='Ready';
   $('events').innerHTML='<p>Starting state restored. Press Run to execute this test.</p>';$('run').disabled=false;
- } catch(e){if(request!==activeRequest)return;notice(e.message);$('result').textContent='Data needs attention';}
+ } catch(e){if(request!==activeRequest)return;compilerError(e.message);notice('Fix the code or starting data, then compile again.');$('result').textContent='Needs attention';$('run').disabled=false;}
+ finally{if(request===activeRequest)$('compile-code').disabled=false;}
 }
 async function runTest() {
- const n=selected,request=++activeRequest;$('run').disabled=true;$('result').textContent='Running Java…';notice('');
+ const n=selected,submitted=source,request=++activeRequest;$('run').disabled=true;$('compile-code').disabled=true;$('compiler-output').hidden=true;$('result').textContent='Running Java…';notice('');
  try {
-  const result=await api(`/api/run?test=${n}`,{method:'POST',headers:{'Content-Type':'text/csv'},body:currentCsv});if(request!==activeRequest)return;
+  const result=await executeJava('run',n);if(request!==activeRequest)return;
+  if(source!==submitted){notice('Code changed while running. Compile again to apply the latest version.');return;}
   beforeState=result.before;afterState=result.after;showingBefore=false;
   $('explanation').textContent=result.explanation;$('result').textContent=result.passed?'✓ Test passed':'Test needs attention';
   $('result').className='result '+(result.passed?'pass':'fail');
   $('events').innerHTML=result.log.map(line=>`<div class="event ${line.startsWith('REJECTED')?'reject':line.startsWith('ADMITTED')||line.startsWith('DISCHARGED')?'success':''}">${escape(line)}</div>`).join('') || '<p>No changes.</p>';
-  $('log-label').textContent='Actual Java output';if(result.passed)completed.add(n);buttons();renderState();
- }catch(e){if(request===activeRequest)notice(e.message);}
- finally{if(request===activeRequest)$('run').disabled=false;}
+  $('log-label').textContent='Actual Java output';if(result.passed)completed.add(n);buttons();renderState();draftStatus(source===originalSource?'Original source · test ran':'Edited Java · compiled & ran');
+  $('compiler-output').hidden=false;$('compiler-output').className='compiler-output success';$('compiler-output').textContent=`Java compiled successfully. Test ${n}: ${result.passed?'PASS':'CHECK RESULT'}.`;
+ }catch(e){if(request===activeRequest){compilerError(e.message);notice('Compilation or execution failed. See the editor output.');$('result').textContent='Compile error';$('result').className='result fail';}}
+ finally{if(request===activeRequest){$('run').disabled=false;$('compile-code').disabled=false;}}
 }
 $('test-buttons').addEventListener('click',e=>{const b=e.target.closest('[data-test]');if(b)selectTest(Number(b.dataset.test));});
 $('run').onclick=runTest;$('next').onclick=()=>selectTest(Math.min(10,selected+1));
@@ -135,6 +198,6 @@ $('stop-recording').onclick=()=>{if(recorder?.state==='recording')recorder.stop(
 $('dismiss-video').onclick=()=>{$('saved-recording').hidden=true;};
 window.addEventListener('beforeunload',e=>{if(recorder?.state==='recording'||videoUrl){e.preventDefault();e.returnValue='Download your recording before leaving.';}});
 (async()=>{
- try{currentCsv=await (await fetch('/api/sample')).text();const response=await fetch('/api/source');if(!response.ok)throw Error('Java source could not be loaded.');source=await response.text();$('connection').textContent='Java is running';await selectTest(1);}
+ try{currentCsv=await (await fetch('/api/sample')).text();const response=await fetch('/api/source');if(!response.ok)throw Error('Java source could not be loaded.');source=await response.text();originalSource=source;await initEditor();$('connection').textContent='Java is running';await selectTest(1);}
  catch(e){$('connection').textContent='Java offline';notice('The Java server is unavailable. Open Start-Website.command and reload. '+e.message);}
 })();
