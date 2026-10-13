@@ -15,6 +15,10 @@ public class EditorExecution {
         public class EditedTestRunner {
             public static void main(String[] args) {
                 try {
+                    if(args[1].equals("play")){
+                        var f=HospitalSession.fields(Files.readString(Path.of("session.txt")));
+                        System.out.println("ED_RESULT "+HospitalSession.execute(f.getOrDefault("csv",""),f.getOrDefault("history",""),f.getOrDefault("command","state")));return;
+                    }
                     int n=Integer.parseInt(args[0]);
                     EDProgram ed=EDProgram.load(EDProgram.parseCsv(Files.readString(Path.of("patients.csv"))));
                     for(int k=1;k<n;k++)if(!ed.runTest(k))throw new IllegalArgumentException("Your code/data failed prerequisite Test "+k);
@@ -68,16 +72,18 @@ public class EditorExecution {
             if(source.length()>100000 || !source.contains("class EDProgram"))throw new IllegalArgumentException("Keep the EDProgram class name; use at most 100,000 characters.");
             int test=Integer.parseInt(fields.getOrDefault("test","0"));
             if(test<1 || test>10)throw new IllegalArgumentException("Test must be 1–10.");
-            String mode=fields.getOrDefault("mode","run");if(!mode.equals("run")&&!mode.equals("prepare"))throw new IllegalArgumentException("Unknown mode.");
-            String csv=fields.getOrDefault("csv","");EDProgram.parseCsv(csv);
+            String mode=fields.getOrDefault("mode","run");if(!mode.equals("run")&&!mode.equals("prepare")&&!mode.equals("play"))throw new IllegalArgumentException("Unknown mode.");
+            String csv=fields.getOrDefault("csv","");if(!csv.isBlank())EDProgram.parseCsv(csv);
             folder=Files.createTempDirectory("ed-editor-");
             Files.writeString(folder.resolve("EDProgram.java"),source);
             Files.writeString(folder.resolve("EditedTestRunner.java"),RUNNER);
             Files.writeString(folder.resolve("patients.csv"),csv);
+            Files.writeString(folder.resolve("HospitalSession.java"),Files.readString(Path.of("src/HospitalSession.java")));
+            Files.writeString(folder.resolve("session.txt"),new String(body,StandardCharsets.UTF_8));
             String java=Path.of(System.getProperty("java.home"),"bin","java").toString();
             String javac=Path.of(System.getProperty("java.home"),"bin","javac").toString();
             // -proc:none prevents source compilation from running annotation processors.
-            capture(List.of(javac,"-J-Xmx96m","-proc:none","--release","17","-d",folder.toString(),"EDProgram.java","EditedTestRunner.java"),folder,12);
+            capture(List.of(javac,"-J-Xmx96m","-proc:none","--release","17","-d",folder.toString(),"EDProgram.java","EditedTestRunner.java","HospitalSession.java"),folder,12);
             // Java 21's SecurityManager restricts edited code to reading its own files.
             // No sockets, process execution, file writes, or environment access.
             // Early System.exit ends only this child process and returns a missing-result error.

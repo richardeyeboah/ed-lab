@@ -60,9 +60,9 @@ $('reset-code').onclick=()=>{
  if(editor){editor.executeEdits('reset',[{range:editor.getModel().getFullModelRange(),text:originalSource}]);editor.pushUndoStop();}
  else{$('editor-fallback').value=originalSource;edited();}
  try{localStorage.removeItem(draftKey);}catch(e){}
- $('compiler-output').hidden=true;selectTest(selected);
+ $('compiler-output').hidden=true;if(liveMode){history=[];liveAction(['state']);}else selectTest(selected);
 };
-$('compile-code').onclick=()=>runTest();
+$('compile-code').onclick=()=>liveMode?liveAction(['state']):runTest();
 $('toggle-explorer').onclick=()=>{$('explorer').hidden=!$('explorer').hidden;editor?.layout();};
 $('open-source').onclick=()=>{codeSection='all';renderCode();editor?.focus();};
 $('editor-find').onclick=()=>editor?.getAction('actions.find').run();
@@ -101,13 +101,14 @@ function renderCode() {
 
 function timeText(p) { return new Date(p.arrival).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'UTC'}); }
 function patientCard(p,i) {
- return `<div class="patient-row" data-level="${p.level}"><span class="queue-position">${i===0?'NEXT':String(i+1).padStart(2,'0')}</span><span class="severity severity-${p.level}">ESI ${p.level}</span><div class="row-person"><strong>${escape(p.name)}</strong><small>${escape(p.id)} · arrived ${timeText(p)} UTC</small></div></div>`;
+ return `<div class="patient-row" data-patient="${escape(p.id)}" data-level="${p.level}"><span class="queue-position">${i===0?'NEXT':String(i+1).padStart(2,'0')}</span><span class="severity severity-${p.level}">ESI ${p.level}</span><div class="row-person"><strong>${escape(p.name)}</strong><small>${escape(p.id)} · arrived ${timeText(p)} UTC</small></div></div>`;
 }
 function renderState() {
  const state=showingBefore?beforeState:afterState;if(!state)return;
  $('waiting-count').textContent=state.waiting.length;$('occupied-count').textContent=state.occupied;
  $('available-count').textContent=10-state.occupied;$('discharged-count').textContent=state.discharged;
  $('queue-total').textContent=state.waiting.length;$('room-summary').textContent=`${state.occupied} of 10 occupied`;
+ if(liveMode)setTimeout(updateRoomSelection,0);
  const people=showAllPatients?state.waiting:state.waiting.slice(0,4);
  $('queue').innerHTML=people.length?people.map(patientCard).join(''):'<div class="empty-queue">No patients are waiting.</div>';
  $('show-queue').hidden=state.waiting.length<=4;
@@ -115,13 +116,13 @@ function renderState() {
  $('severity-counts').innerHTML=state.counts.map((count,i)=>`<span><strong>ESI ${i+1}</strong> · ${count} waiting</span>`).join('');
  $('rooms').innerHTML=state.rooms.map((p,i)=>{
   const old=beforeState?.rooms[i];const changed=!!afterState && !showingBefore && ((old?.id||'')!==(p?.id||''));
-  return `<div class="room ${p?'occupied':''} ${changed?'changed':''}" data-level="${p?.level||0}" style="--level:${p?levelColors[p.level]:'#dce2df'}"><div class="room-top">Room ${i+1}${p?`<span class="severity severity-${p.level}">${p.level}</span>`:''}</div><p>${p?escape(p.name):'Empty'}</p>${p?`<small>${escape(p.id)} · ESI ${p.level}</small>`:''}${changed?`<span class="room-change">${p?'Admitted':'Freed'}</span>`:''}</div>`;
+  return `<div tabindex="0" role="button" aria-label="Select room ${i+1}" data-room="${i+1}" data-patient="${p?escape(p.id):''}" class="room ${p?'occupied':''} ${changed?'changed':''}" data-level="${p?.level||0}" style="--level:${p?levelColors[p.level]:'#dce2df'}"><div class="room-top">Room ${i+1}${p?`<span class="severity severity-${p.level}">${p.level}</span>`:''}</div><p>${p?escape(p.name):'Empty'}</p>${p?`<small>${escape(p.id)} · ESI ${p.level}</small>`:''}${changed?`<span class="room-change">${p?'Admitted':'Freed'}</span>`:''}</div>`;
  }).join('');
  $('arrival-list').innerHTML=state.arrivals.map(p=>`<div><span>#${p.sequence}</span><strong>${escape(p.name)}</strong><span class="severity severity-${p.level}">${p.level}</span><small>${timeText(p)} · ${escape(p.status)}</small></div>`).join('');
  $('before').classList.toggle('active',showingBefore);$('after').classList.toggle('active',!showingBefore);
  $('before').setAttribute('aria-pressed',showingBefore);$('after').setAttribute('aria-pressed',!showingBefore);
- $('test-ten').hidden=selected!==10;
- if(lastResult){if(showingBefore){$('outcome').className='outcome';$('outcome-title').textContent='Before this test';$('outcome-message').textContent='This is the starting state. Switch to After to see the result.';$('outcome').querySelector('.outcome-icon').textContent='←';}else renderOutcome(lastResult);}
+ $('test-ten').hidden=liveMode||selected!==10;
+ if(lastResult && !liveMode){if(showingBefore){$('outcome').className='outcome';$('outcome-title').textContent='Before this test';$('outcome-message').textContent='This is the starting state. Switch to After to see the result.';$('outcome').querySelector('.outcome-icon').textContent='←';}else renderOutcome(lastResult);}
 }
 function renderOutcome(result) {
  const admitted=[],freed=[];
@@ -186,7 +187,7 @@ function download(blob,name) {
 }
 $('download-code').onclick=()=>download(new Blob([source],{type:'text/plain'}),'EDProgram.java');
 async function importCsv(csv) {
- await api('/api/import',{method:'POST',headers:{'Content-Type':'text/csv'},body:csv});currentCsv=csv;completed.clear();await selectTest(1);
+ await api('/api/import',{method:'POST',headers:{'Content-Type':'text/csv'},body:csv});currentCsv=csv;completed.clear();if(liveMode){history=[];await liveAction(['state']);}else await selectTest(1);
 }
 $('csv').onchange=async e=>{
  const file=e.target.files[0];if(!file)return;
@@ -196,6 +197,67 @@ $('sample').onclick=async()=>{try{await importCsv(await (await fetch('/api/sampl
 const requirements=[['PriorityQueue + custom PatientComparator','Comparator tab; Tests 1 and 4'],['Five ESI levels and assignment colours','Patient badges and severity legend'],['FIFO within the same priority','Arrival and treatment order; sample P001 before P006'],['Arrival-time tracking','Patient arrival times and sequence numbers'],['admitPatient(), getNextPatient(), peekNextPatient()','Tests 1 and 10; commented Java source'],['Monitoring, queue size and statistics','Counters, room grid, severity counts and Java output'],['Occupied rooms, full capacity and null input','Tests 3, 4 and 5'],['Discharge, updated rooms and empty-room rejection','Tests 6, 7, 8 and 9'],['Final queue/occupancy and search/peek','Test 10']];
 $('requirements-list').innerHTML=requirements.map(([a,b])=>`<div class="requirement"><span>✓</span><strong>${a}</strong><br><small>${b}</small></div>`).join('');
 $('requirements').onclick=()=>$('checklist').showModal();$('close-checklist').onclick=()=>$('checklist').close();
+// LIVE HOSPITAL: Java replays this visitor's actions; the browser only renders snapshots.
+let liveMode=true, history=[], chosenRoom=1, liveBusy=false;
+async function switchMode(live) {
+ liveMode=live;activeRequest++;
+ document.body.classList.toggle('hospital-live',live);
+ $('live-controls').hidden=!live;
+ $('live-mode').classList.toggle('active',live);$('guided-mode').classList.toggle('active',!live);
+ $('compile-code').textContent=live?'▶ Compile & apply Java':'▶ Compile & run test';
+ lastResult=null;showingBefore=false;showAllPatients=live;
+ if(live){codeSection='all';renderCode();await liveAction(['state']);}else await selectTest(selected);
+}
+function updateRoomSelection(){
+ document.querySelectorAll('[data-room]').forEach(el=>{el.classList.toggle('selected-room',Number(el.dataset.room)===chosenRoom);});
+ const p=afterState?.rooms[chosenRoom-1];
+ $('selected-room').textContent=`Room ${chosenRoom} selected · ${p?p.name:'empty'}`;
+}
+function movement(before,after,positions){
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ for(const p of before.waiting){
+  const room=after.rooms.findIndex(person=>person?.id===p.id);if(room<0)continue;
+  const origin=positions.get(p.id),destination=document.querySelector(`[data-room="${room+1}"]`)?.getBoundingClientRect();
+  if(!origin||!destination)continue;
+  const chip=document.createElement('div');chip.className=`moving-patient severity-${p.level}`;chip.textContent=p.name;
+  Object.assign(chip.style,{left:origin.left+'px',top:origin.top+'px',width:Math.min(origin.width,180)+'px'});document.body.append(chip);
+  chip.animate([{transform:'translate(0,0)',opacity:1},{transform:`translate(${destination.left-origin.left}px,${destination.top-origin.top}px)`,opacity:1}],{duration:900,easing:'cubic-bezier(.22,1,.36,1)'}).finished.then(()=>chip.remove());
+ }
+ before.rooms.forEach((p,i)=>{if(p&&!after.rooms[i]){const room=document.querySelector(`[data-room="${i+1}"]`);room?.animate([{opacity:.35,transform:'scale(.94)'},{opacity:1,transform:'scale(1)'}],{duration:700});
+ const origin=positions.get(p.id);if(origin){const chip=document.createElement('div');chip.className=`moving-patient severity-${p.level}`;chip.textContent=p.name+' · Discharged';Object.assign(chip.style,{left:origin.left+'px',top:origin.top+'px'});document.body.append(chip);chip.animate([{transform:'translateY(0)',opacity:1},{transform:'translateY(-80px)',opacity:0}],{duration:1000,easing:'ease-out'}).finished.then(()=>chip.remove());}}});
+}
+async function liveAction(parts){
+ if(liveBusy)return;liveBusy=true;
+ const submitted=source, command=parts.map(encodeURIComponent).join('\t');
+ const positions=new Map();document.querySelectorAll('[data-patient]').forEach(el=>{if(el.dataset.patient)positions.set(el.dataset.patient,el.getBoundingClientRect());});
+ document.querySelectorAll('#live-controls button,#patient-form button,.hospital-modes button,.data-actions button').forEach(b=>b.disabled=true);
+ $('live-feedback').textContent=source===originalSource?'Java is updating your hospital…':'Compiling your Java and updating the hospital…';
+ try{
+  const fields=new URLSearchParams({csv:currentCsv,history:history.join('\n'),command,source,mode:'play',test:'1'});
+  const result=await api(source===originalSource?'/api/play':'/api/edit',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:fields.toString()});
+  if(source!==submitted)throw Error('Code changed during execution. Compile again.');
+  if(result.passed&&['add','admit','discharge'].includes(parts[0]))history.push(command);
+  beforeState=result.before;afterState=result.after;showingBefore=false;lastResult=null;renderState();
+  $('live-feedback').textContent=result.log.join(' · ')||'Hospital ready. Click a room to select it.';
+  $('live-feedback').classList.toggle('rejected',!result.passed);
+  $('events').innerHTML=result.log.map(line=>`<div class="event">${escape(line)}</div>`).join('');
+  $('compiler-output').hidden=true;movement(result.before,result.after,positions);
+  if(result.passed&&parts[0]==='add'){$('patient-dialog').close();const added=result.after.waiting.find(p=>p.id===parts[1]);const row=Array.from(document.querySelectorAll('#queue [data-patient]')).find(el=>el.dataset.patient===added?.id);row?.scrollIntoView({block:'nearest'});if(row&&!matchMedia('(prefers-reduced-motion: reduce)').matches)row.animate([{opacity:0,transform:'translateX(-30px)'},{opacity:1,transform:'translateX(0)'}],{duration:700});}
+  return result;
+ }catch(e){$('live-feedback').textContent=e.message;$('patient-error').textContent=e.message;compilerError(e.message);}
+ finally{liveBusy=false;document.querySelectorAll('#live-controls button,#patient-form button,.hospital-modes button,.data-actions button').forEach(b=>b.disabled=false);}
+}
+$('live-mode').onclick=()=>switchMode(true);$('guided-mode').onclick=()=>switchMode(false);
+$('rooms').addEventListener('click',e=>{const room=e.target.closest('[data-room]');if(liveMode&&room){chosenRoom=Number(room.dataset.room);updateRoomSelection();}});
+$('rooms').addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();e.target.click();}});
+$('new-patient').onclick=()=>{$('patient-error').textContent='';$('patient-dialog').showModal();};
+$('close-patient').onclick=()=>$('patient-dialog').close();
+$('patient-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);await liveAction(['add',f.get('id').trim(),f.get('name').trim(),f.get('complaint').trim(),f.get('level')]);};
+$('admit-live').onclick=()=>liveAction(['admit',String(chosenRoom)]);
+$('discharge-live').onclick=()=>liveAction(['discharge',String(chosenRoom)]);
+$('live-peek').onclick=()=>liveAction(['peek']);
+$('patient-search').onsubmit=e=>{e.preventDefault();liveAction(['search',$('lookup-id').value.trim()]);};
+$('empty-hospital').onclick=()=>{currentCsv='';history=[];liveAction(['state']);};
 // RECORDING: user chooses the screen and microphone using the browser's prompts.
 // No automatic capture on page load, no uploads, no third-party recording service.
 let recorder,streams=[],chunks=[],timer,started,videoUrl;
@@ -230,6 +292,6 @@ $('stop-recording').onclick=()=>{if(recorder?.state==='recording')recorder.stop(
 $('dismiss-video').onclick=()=>{$('saved-recording').hidden=true;};
 window.addEventListener('beforeunload',e=>{if(recorder?.state==='recording'||videoUrl){e.preventDefault();e.returnValue='Download your recording before leaving.';}});
 (async()=>{
- try{currentCsv=await (await fetch('/api/sample')).text();const response=await fetch('/api/source');if(!response.ok)throw Error('Java source could not be loaded.');source=await response.text();originalSource=source;await initEditor();$('connection').textContent='Java is running';await selectTest(1);}
+ try{currentCsv=await (await fetch('/api/sample')).text();const response=await fetch('/api/source');if(!response.ok)throw Error('Java source could not be loaded.');source=await response.text();originalSource=source;await initEditor();$('connection').textContent='Java is running';await switchMode(true);}
  catch(e){$('connection').textContent='Java offline';notice('The Java server is unavailable. Open Start-Website.command and reload. '+e.message);}
 })();

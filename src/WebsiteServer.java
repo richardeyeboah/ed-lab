@@ -30,6 +30,12 @@ public class WebsiteServer {
                 // All test requests are stateless. Each visitor supplies their own CSV;
                 // no uploaded dataset can change what another visitor sees.
                 String path=x.getRequestURI().getPath();
+                if(path.equals("/api/play")){
+                    if(!x.getRequestMethod().equals("POST"))throw new IllegalArgumentException("POST required.");
+                    byte[] body=x.getRequestBody().readNBytes(250001);if(body.length>250000)throw new IllegalArgumentException("Session is too large.");
+                    Map<String,String> f=HospitalSession.fields(new String(body,StandardCharsets.UTF_8));
+                    send(x,200,"application/json",HospitalSession.execute(f.getOrDefault("csv",""),f.getOrDefault("history",""),f.getOrDefault("command","state")));return;
+                }
                 if(path.equals("/api/edit")){EditorExecution.handle(x);return;}
                 if(path.equals("/api/source")) {send(x,200,"text/plain",Files.readString(Path.of("src/EDProgram.java")));return;}
                 if(path.equals("/api/sample")) {send(x,200,"text/csv",Files.readString(Path.of("data/patients.csv")));return;}
