@@ -8,7 +8,7 @@ Everything for the website is in this folder. Double-click Start-Website.command
 3. Compare Before and After. Changed room cards are outlined.
 4. Select each subsequent test. Every test restores its prerequisite state automatically.
 5. Use Comparator and Data structures tabs to explain PriorityQueue, FIFO, the array and HashMap.
-6. Use Arrival order to compare registration order against treatment order. It includes treated patients; the Treatment order tab shows only those still waiting.
+6. Open Details to compare arrival order against the main waiting list’s treatment order. Arrival records include treated patients. The waiting list initially shows the next four patients; Show all expands it.
 7. To record, click Record walkthrough, choose the tab/window/screen, and allow your microphone. Stop & save finishes recording; click Download recording to save the file before leaving the page.
 
 Recording uses browser MediaRecorder and screen/microphone permissions. It saves locally and never uploads. Actual microphone capture has not been tested on this Mac during development. Chrome is recommended for screen recording. If unavailable, use Shift–Command–5, select your microphone under Options, and record the browser window.
@@ -54,3 +54,9 @@ The source panel uses Microsoft's Monaco Editor (MIT, bundled version 0.57.0), w
 Compile & run test applies the current Java source. Errors appear below the editor with line markers. Keep the EDProgram class name and assignment method signatures so the display bridge can read the results. Selecting another test compiles edited code to restore its prerequisite state. The original source and repository are never overwritten by a visitor's draft.
 
 Edited code is compiled with annotation processing disabled, then executed in a separate, memory/time/output-limited Java 21 process. An execution policy permits reading only the request's temporary files, and denies network access, process execution, writes, and environment access. An early System.exit ends only its child process and is reported as a missing-result error. Each request's temporary folder is removed afterwards. The deployed container includes the JDK for compilation. Verified: all ten edited-code scenarios; a changed name reflected in the UI; syntax-error diagnostics; draft reload/reset; denied file/network/process/write/environment attempts; early-exit handling; timeout of an infinite loop.
+
+## Simplified test display
+
+Each test shows a short purpose, one result message, a numbered waiting list, and ten room boxes. Severity badges use stronger red, orange, yellow, blue and green with ESI numbers. The next waiting patient is marked NEXT; arrival times remain visible for FIFO explanation. Occupied rooms show names and severity; empty rooms say Empty. Only changed rooms are outlined.
+
+Statistics, counts by severity, arrival-order records and full Java output are under Details. Test 10 additionally reveals the actual Java search and peek results. Before/After changes the displayed snapshot and clearly labels the starting state. All ten scenarios passed through the revised browser interface. Java logic and the editable workspace are preserved.

@@ -2,10 +2,11 @@
 const $ = id => document.getElementById(id);
 const titles = ['', 'Admit patients', 'Display rooms', 'Occupied room', 'Full capacity', 'Null patient', 'Discharge', 'Updated rooms', 'Doctor clearance', 'Empty room', 'Search & peek'];
 const descriptions = ['', 'Admit the next patients by severity, then admit Lisa directly into room 10.', 'Read the room array and sorted waiting queue without changing anything.', 'Try room 1 again. It is occupied: Java must reject admission and preserve the queue.', 'Fill every remaining room. Patients still waiting cannot replace existing occupants.', 'Pass a null patient. Java must reject the input without changing state.', 'Explicitly discharge the cleared non-critical patients in rooms 6 and 8.', 'Display room occupancy after Test 6: rooms 6 and 8 are available.', 'The doctor has cleared the patients in rooms 1 and 3. Discharge them.', 'Try to discharge room 6 again. It is already empty: Java must reject the action.', 'Search records, inspect the final queue, and peek twice without removing anyone.'];
-const levelColors = ['', '#d74842', '#db8633', '#d3ad28', '#416fc3', '#429965'];
+const levelColors = ['', '#dc2626', '#ea790c', '#facc15', '#2563eb', '#16a34a'];
 const escape = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let currentCsv='', source='', selected=1, beforeState=null, afterState=null, showingBefore=false, arrivalView=false, codeSection='test', activeRequest=0;
 const completed = new Set();
+let showAllPatients=false,lastResult=null;
 let originalSource='', editor=null, decorations=[], expanded=false;
 const draftKey='ed-lab-java-draft-v1';
 function draftStatus(message) { $('draft-status').textContent=message; }
@@ -14,7 +15,8 @@ function saveDraft() {
  catch(e){notice('Browser storage is unavailable. Download your Java file to keep your changes.');}
 }
 function edited() {
- source=editor?editor.getValue():$('editor-fallback').value;
+ source=editor?editor.getValue():$('editor-fallback').value;lastResult=null;
+ $('outcome-title').textContent='Code changed';$('outcome-message').textContent='Compile and run to see what your changes do.';
  $('dirty-dot').hidden=source===originalSource;completed.clear();buttons();
  draftStatus(source===originalSource?'Original source':'Edited · compile to apply');
  $('result').textContent='Code changed · run again';$('result').className='result';
@@ -97,28 +99,58 @@ function renderCode() {
  document.querySelectorAll('[data-section]').forEach(b=>b.classList.toggle('active',b.dataset.section===codeSection));
 }
 
-function patientCard(p) {
- return `<div class="patient" data-level="${p.level}" style="--level:${levelColors[p.level]}"><div class="patient-id">${escape(p.id)}<span class="badge">${p.level}</span></div><div class="patient-name">${escape(p.name)}</div><div class="patient-time">#${p.sequence} · ${new Date(p.arrival).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'})} UTC</div>${arrivalView?`<div class="status-tag">${escape(p.status)}</div>`:''}</div>`;
+function timeText(p) { return new Date(p.arrival).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'UTC'}); }
+function patientCard(p,i) {
+ return `<div class="patient-row" data-level="${p.level}"><span class="queue-position">${i===0?'NEXT':String(i+1).padStart(2,'0')}</span><span class="severity severity-${p.level}">ESI ${p.level}</span><div class="row-person"><strong>${escape(p.name)}</strong><small>${escape(p.id)} · arrived ${timeText(p)} UTC</small></div></div>`;
 }
 function renderState() {
  const state=showingBefore?beforeState:afterState;if(!state)return;
  $('waiting-count').textContent=state.waiting.length;$('occupied-count').textContent=state.occupied;
  $('available-count').textContent=10-state.occupied;$('discharged-count').textContent=state.discharged;
- const people=arrivalView?state.arrivals:state.waiting;
- $('queue-title').textContent=arrivalView?'All arrivals · includes treated patients':'Waiting queue';
- $('queue').innerHTML=people.length?people.map(patientCard).join(''):'<div class="empty-queue">No patients waiting.</div>';
- $('severity-counts').innerHTML=state.counts.map((count,i)=>`<span><strong style="color:${levelColors[i+1]}">ESI ${i+1}</strong> · ${count} waiting</span>`).join('');
+ $('queue-total').textContent=state.waiting.length;$('room-summary').textContent=`${state.occupied} of 10 occupied`;
+ const people=showAllPatients?state.waiting:state.waiting.slice(0,4);
+ $('queue').innerHTML=people.length?people.map(patientCard).join(''):'<div class="empty-queue">No patients are waiting.</div>';
+ $('show-queue').hidden=state.waiting.length<=4;
+ $('show-queue').textContent=showAllPatients?'Show fewer ↑':`Show all ${state.waiting.length} patients ↓`;
+ $('severity-counts').innerHTML=state.counts.map((count,i)=>`<span><strong>ESI ${i+1}</strong> · ${count} waiting</span>`).join('');
  $('rooms').innerHTML=state.rooms.map((p,i)=>{
   const old=beforeState?.rooms[i];const changed=!!afterState && !showingBefore && ((old?.id||'')!==(p?.id||''));
-  return `<div class="room ${p?'occupied':''} ${changed?'changed':''}" style="--level:${p?levelColors[p.level]:'#9baa93'}"><div class="room-top"><span>ROOM ${String(i+1).padStart(2,'0')}</span>${p?`<span class="badge">${p.level}</span>`:'<span>○</span>'}</div><p>${p?escape(p.name):'Available'}</p><small>${p?escape(p.id)+' · ESI '+p.level:'Ready for a patient'}</small></div>`;
+  return `<div class="room ${p?'occupied':''} ${changed?'changed':''}" data-level="${p?.level||0}" style="--level:${p?levelColors[p.level]:'#dce2df'}"><div class="room-top">Room ${i+1}${p?`<span class="severity severity-${p.level}">${p.level}</span>`:''}</div><p>${p?escape(p.name):'Empty'}</p>${p?`<small>${escape(p.id)} · ESI ${p.level}</small>`:''}${changed?`<span class="room-change">${p?'Admitted':'Freed'}</span>`:''}</div>`;
  }).join('');
+ $('arrival-list').innerHTML=state.arrivals.map(p=>`<div><span>#${p.sequence}</span><strong>${escape(p.name)}</strong><span class="severity severity-${p.level}">${p.level}</span><small>${timeText(p)} · ${escape(p.status)}</small></div>`).join('');
  $('before').classList.toggle('active',showingBefore);$('after').classList.toggle('active',!showingBefore);
  $('before').setAttribute('aria-pressed',showingBefore);$('after').setAttribute('aria-pressed',!showingBefore);
- $('priority-view').classList.toggle('active',!arrivalView);$('arrival-view').classList.toggle('active',arrivalView);
+ $('test-ten').hidden=selected!==10;
+ if(lastResult){if(showingBefore){$('outcome').className='outcome';$('outcome-title').textContent='Before this test';$('outcome-message').textContent='This is the starting state. Switch to After to see the result.';$('outcome').querySelector('.outcome-icon').textContent='←';}else renderOutcome(lastResult);}
 }
+function renderOutcome(result) {
+ const admitted=[],freed=[];
+ result.after.rooms.forEach((p,i)=>{if(p && p.id!==result.before.rooms[i]?.id)admitted.push(i+1);if(!p && result.before.rooms[i])freed.push(i+1);});
+ let title='Room status displayed',message=`${result.after.occupied} rooms are occupied and ${10-result.after.occupied} are empty. No patients moved.`;
+ const rejected=result.log.find(line=>line.startsWith('REJECTED'));
+ if(!result.passed){title='Check the result';message='Your code ran, but this test’s checks did not pass. Open Details to inspect the Java output.';}
+ else if(rejected && !admitted.length && !freed.length){
+  title=selected===9?'Discharge rejected':'Admission rejected';
+  message=selected===5?'A null value is not a patient. The rooms and waiting queue stayed unchanged.':rejected.replace(/^REJECTED · /,'');
+ }else if(admitted.length){title=`${admitted.length} patient${admitted.length===1?'':'s'} admitted`;message=`Rooms ${admitted.join(', ')} are now occupied.${rejected?' Further admission was rejected because all rooms are full.':''}`;}
+ else if(freed.length){title=`${freed.length} patients discharged`;message=`Rooms ${freed.join(' and ')} are now empty. The waiting queue stayed unchanged.`;}
+ else if(selected===10){title='Search and peek complete';message=`The next patient was inspected without removal. ${result.after.waiting.length} patients are still waiting.`;}
+ $('outcome').className='outcome '+(!result.passed?'warning':rejected&&!admitted.length?'rejected':'done');
+ $('outcome-title').textContent=title;$('outcome-message').textContent=message;
+ $('outcome').querySelector('.outcome-icon').textContent=!result.passed?'!':rejected&&!admitted.length?'!':'✓';
+ if(selected===10){
+  $('search-result').textContent=(result.log.find(line=>line.startsWith('SEARCH'))||'No search output.').replace(/^SEARCH · /,'');
+  $('peek-result').textContent=(result.log.find(line=>line.startsWith('PEEK ·'))||'No peek output.').replace(/^PEEK · /,'');
+ }
+}
+$('show-queue').onclick=()=>{showAllPatients=!showAllPatients;renderState();};
+
 async function selectTest(n) {
- selected=n;const request=++activeRequest;$('compile-code').disabled=true;showingBefore=true;beforeState=null;afterState=null;
- $('scenario-title').textContent=`${String(n).padStart(2,'0')} / ${titles[n]}`;
+ selected=n;lastResult=null;showAllPatients=false;$('details').open=false;$('test-ten').hidden=n!==10;
+ $('outcome').className='outcome';$('outcome-title').textContent='Ready to run';$('outcome-message').textContent='Press Run to see the result of this test.';$('outcome').querySelector('.outcome-icon').textContent='→';
+ $('search-result').textContent='Run Test 10 to find the patient.';$('peek-result').textContent='Run Test 10 to inspect the queue.';
+ const request=++activeRequest;$('compile-code').disabled=true;showingBefore=true;beforeState=null;afterState=null;
+ $('scenario-title').textContent=`Test ${n}: ${titles[n]}`;
  $('explanation').textContent=descriptions[n];$('run').textContent=`▶ Run Test ${n}`;$('run').disabled=true;
  $('next').disabled=n===10;$('result').className='result';$('result').textContent='Preparing…';
  $('events').innerHTML='<p>Preparing the starting state in Java…</p>';$('log-label').textContent='Before this test';
@@ -135,11 +167,11 @@ async function runTest() {
  try {
   const result=await executeJava('run',n);if(request!==activeRequest)return;
   if(source!==submitted){notice('Code changed while running. Compile again to apply the latest version.');return;}
-  beforeState=result.before;afterState=result.after;showingBefore=false;
-  $('explanation').textContent=result.explanation;$('result').textContent=result.passed?'✓ Test passed':'Test needs attention';
+  lastResult=result;beforeState=result.before;afterState=result.after;showingBefore=false;
+  $('explanation').textContent=descriptions[n];$('result').textContent=result.passed?'✓ Test passed':'Test needs attention';
   $('result').className='result '+(result.passed?'pass':'fail');
   $('events').innerHTML=result.log.map(line=>`<div class="event ${line.startsWith('REJECTED')?'reject':line.startsWith('ADMITTED')||line.startsWith('DISCHARGED')?'success':''}">${escape(line)}</div>`).join('') || '<p>No changes.</p>';
-  $('log-label').textContent='Actual Java output';if(result.passed)completed.add(n);buttons();renderState();draftStatus(source===originalSource?'Original source · test ran':'Edited Java · compiled & ran');
+  renderOutcome(result);$('log-label').textContent='Actual Java output';if(result.passed)completed.add(n);buttons();renderState();draftStatus(source===originalSource?'Original source · test ran':'Edited Java · compiled & ran');
   $('compiler-output').hidden=false;$('compiler-output').className='compiler-output success';$('compiler-output').textContent=`Java compiled successfully. Test ${n}: ${result.passed?'PASS':'CHECK RESULT'}.`;
  }catch(e){if(request===activeRequest){compilerError(e.message);notice('Compilation or execution failed. See the editor output.');$('result').textContent='Compile error';$('result').className='result fail';}}
  finally{if(request===activeRequest){$('run').disabled=false;$('compile-code').disabled=false;}}
@@ -147,7 +179,7 @@ async function runTest() {
 $('test-buttons').addEventListener('click',e=>{const b=e.target.closest('[data-test]');if(b)selectTest(Number(b.dataset.test));});
 $('run').onclick=runTest;$('next').onclick=()=>selectTest(Math.min(10,selected+1));
 $('before').onclick=()=>{showingBefore=true;renderState();};$('after').onclick=()=>{showingBefore=false;renderState();};
-$('arrival-view').onclick=()=>{arrivalView=true;renderState();};$('priority-view').onclick=()=>{arrivalView=false;renderState();};
+
 document.querySelectorAll('[data-section]').forEach(b=>b.onclick=()=>{codeSection=b.dataset.section;renderCode();});
 function download(blob,name) {
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);

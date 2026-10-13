@@ -19,12 +19,22 @@
 <div id="compiler-output" class="compiler-output" hidden role="status"></div>
 </div></div><div class="editor-status"><span id="draft-status">Original source</span><span id="cursor-position">Ln 1, Col 1</span><span>UTF-8</span><span>Java</span></div>
 </div>
-<div class="simulation"><div class="sim-top"><div><span class="eyebrow">LIVE DEPARTMENT</span><h2 id="scenario-title">Start with the arrivals.</h2></div><span id="result" class="result">Ready</span></div><p id="explanation" class="explanation">Twelve sample patients are imported. Select Test 1 to admit the first patients.</p><div class="run-row"><button id="run" class="primary">▶ Run Test 1</button><button id="next" class="secondary">Next test →</button><div class="view-toggle"><button id="before" aria-pressed="false">Before</button><button id="after" class="active" aria-pressed="true">After</button></div></div><p class="fixture-note">Each test restores its prepared starting state. Repeat any test safely.</p>
+<div class="simulation">
+<div class="sim-top"><div><span class="eyebrow">ONE TEST AT A TIME</span><h2 id="scenario-title">Admit patients</h2></div><span id="result" class="result">Ready</span></div>
+<p id="explanation" class="explanation">Select a test and run it to see what happens.</p>
+<div class="run-row"><button id="run" class="primary">▶ Run Test 1</button><button id="next" class="secondary">Next test →</button><div class="view-toggle"><button id="before" aria-pressed="false">Before</button><button id="after" class="active" aria-pressed="true">After</button></div></div>
+<div id="outcome" class="outcome" role="status"><span class="outcome-icon">→</span><div><strong id="outcome-title">Ready to begin</strong><p id="outcome-message">Press Run to watch this test happen.</p></div></div>
+<div class="queue-head"><h3>Waiting to be treated <span id="queue-total" class="count-pill">12</span></h3><span class="section-hint">Most urgent first</span></div>
+<div id="queue" class="queue"></div><button id="show-queue" class="show-more" hidden>Show all patients ↓</button>
+<div class="simple-legend" aria-label="Severity colour legend"><span class="severity severity-1">1 Red</span><span class="severity severity-2">2 Orange</span><span class="severity severity-3">3 Yellow</span><span class="severity severity-4">4 Blue</span><span class="severity severity-5">5 Green</span><small>1 most urgent → 5 least urgent</small></div>
+<div class="room-head"><h3>Treatment rooms</h3><span id="room-summary">0 of 10 occupied</span></div><div id="rooms" class="rooms"></div>
+<div id="test-ten" class="test-ten" hidden><div><span>SEARCH RESULT</span><p id="search-result">Run Test 10 to find the patient.</p></div><div><span>PEEK NEXT · NO REMOVAL</span><p id="peek-result">Run Test 10 to inspect the queue.</p></div></div>
+<details id="details" class="more-details"><summary>Details <span>Statistics, arrival order & full Java output</span></summary>
+<p class="fixture-note">Each test restores its prepared starting state. Example arrival times are shown in UTC.</p>
 <div class="stats"><div><span id="waiting-count">12</span><label>Waiting</label></div><div><span id="occupied-count">0</span><label>In rooms</label></div><div><span id="available-count">10</span><label>Available rooms</label></div><div><span id="discharged-count">0</span><label>Discharged</label></div></div>
-<div class="legend"><span><i class="level-1"></i>1 Critical</span><span><i class="level-2"></i>2 Emergent</span><span><i class="level-3"></i>3 Urgent</span><span><i class="level-4"></i>4 Less urgent</span><span><i class="level-5"></i>5 Non-urgent</span></div>
-<div class="queue-head"><h3 id="queue-title">Waiting queue</h3><div class="queue-tabs"><button id="priority-view" class="active">Treatment order</button><button id="arrival-view">Arrival order</button></div></div><div id="queue" class="queue"></div><div id="severity-counts" class="severity-counts"></div>
-<div class="room-head"><h3>Treatment rooms</h3><span>10 rooms · fixed capacity</span></div><div id="rooms" class="rooms"></div>
-<div class="log-head"><h3>What Java did</h3><span id="log-label">Waiting for your first test</span></div><div id="events" class="events" aria-live="polite"><p>Choose a test, read its explanation, then press Run.</p></div>
+<div id="severity-counts" class="severity-counts"></div><h3>Arrival order · including treated patients</h3><div id="arrival-list" class="arrival-list"></div>
+<div class="log-head"><h3>Full Java output</h3><span id="log-label">Before this test</span></div><div id="events" class="events"><p>Choose a test and press Run.</p></div>
+</details>
 </div></section>
 <section class="bottom-note"><span>01 / UNDERSTAND</span><p>Urgency comes first. Arrival time breaks ties. Rooms never overwrite occupants.</p><button id="requirements" class="secondary">Assignment checklist ↗</button></section>
 </main>
