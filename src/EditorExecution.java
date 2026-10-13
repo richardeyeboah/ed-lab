@@ -79,7 +79,8 @@ public class EditorExecution {
             // -proc:none prevents source compilation from running annotation processors.
             capture(List.of(javac,"-J-Xmx96m","-proc:none","--release","17","-d",folder.toString(),"EDProgram.java","EditedTestRunner.java"),folder,12);
             // Java 21's SecurityManager restricts edited code to reading its own files.
-            // No sockets, process execution, file writes, environment access, or System.exit.
+            // No sockets, process execution, file writes, or environment access.
+            // Early System.exit ends only this child process and returns a missing-result error.
             String safe=folder.toString().replace("\\","\\\\");
             Path policy=folder.resolve("execution.policy");
             Files.writeString(policy,"grant { permission java.io.FilePermission \""+safe+"/-\", \"read\"; };\n");
