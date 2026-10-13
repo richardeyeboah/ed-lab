@@ -29,7 +29,7 @@ With JDK 17+ available:
     javac --release 17 -d out src/*.java
     java -cp out WebsiteServer
 
-Then visit http://127.0.0.1:8765. The server is bound to this computer only. This local website is not a hosted public URL. Hosting requires a Java-capable server.
+Then visit http://127.0.0.1:8765. The server is bound to this computer only. Vercel deployment uses Dockerfile.vercel to compile and run the actual Java backend in a container. Each test request includes its visitor’s dataset; uploaded CSVs are never saved globally or shared between visitors. No database is required.
 
 Console verification:
 
@@ -42,3 +42,7 @@ Columns: id,name,complaint,level. Level must be 1–5. IDs must be unique; DIREC
 Java 17-target compilation; all ten console scenarios; later-urgent-before-earlier-low-priority; equal-level FIFO; all ten test buttons in the browser; source tabs; Before/After view; recording options dialog; CSV API rejects invalid levels/duplicate IDs and accepts quoted commas. Recording permission and actual audio/video capture need to be exercised by you.
 
 Follow the course rules on AI assistance. Add your own name/group details only if required. No submission or publication has occurred.
+
+## GitHub and deployment
+
+Repository: https://github.com/richardeyeboah/ed-lab (private). Vercel detects Dockerfile.vercel. Build-time verification runs the Java console scenarios before the container is published. The .runtime and out directories are excluded from Git and deployment.
