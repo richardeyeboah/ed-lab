@@ -69,7 +69,8 @@ public class EDProgram {
     // Demo time advances 30 seconds per arrival so repeated tests are reproducible.
     Patient registerPatient(String id,String name,String complaint,int level) {
         if (id==null || records.containsKey(id.trim())) throw new IllegalArgumentException("Duplicate or missing ID.");
-        Patient p=new Patient(id,name,complaint,level,start.plusSeconds(sequence*30),++sequence);
+        Patient p=new Patient(id,name,complaint,level,start.plusSeconds(sequence*30),sequence+1);
+        sequence++; // Commit the arrival counter only after validation succeeds.
         records.put(p.id,p); waiting.add(p); log.add("ARRIVAL · "+p.description()); return p;
     }
 
@@ -91,12 +92,23 @@ public class EDProgram {
         if((known!=null && known!=p) || p.status.startsWith("Room") || p.status.equals("Discharged")) {
             log.add("REJECTED · Duplicate ID or patient already treated/discharged.");return false;
         }
-        waiting.remove(p); records.put(p.id,p); rooms[room-1]=p; p.status="Room "+room;
+        // The usual next-patient path removes the heap head in O(log n).
+        // Selected/direct patients are not queued, so they need no heap search.
+        // Admitting a specific non-head waiting patient is a separate O(n) path.
+        if (known!=null && p.status.equals("Waiting")) {
+            if (waiting.peek()==p) waiting.poll();
+            else if (!waiting.remove(p)) {
+                log.add("REJECTED · Waiting record is inconsistent; nothing changed.");
+                return false;
+            }
+        }
+        records.put(p.id,p); rooms[room-1]=p; p.status="Room "+room;
         log.add("ADMITTED · "+p.description()+" → room "+room);return true;
     }
 
     // ADMIT NEXT: check availability BEFORE removing someone from the queue.
-    // peek chooses the next patient; admitPatient performs the actual removal.
+    // peek chooses the next patient; admitPatient validates then polls the head.
+    // Normal next-patient admission is O(log n), with O(1) room validation.
     boolean admitNextPatient(int room) {
         if(waiting.isEmpty()) {log.add("No patients waiting.");return false;}
         return admitPatient(room,peekNextPatient());

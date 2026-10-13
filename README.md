@@ -60,3 +60,11 @@ Edited code is compiled with annotation processing disabled, then executed in a 
 Each test shows a short purpose, one result message, a numbered waiting list, and ten room boxes. Severity badges use stronger red, orange, yellow, blue and green with ESI numbers. The next waiting patient is marked NEXT; arrival times remain visible for FIFO explanation. Occupied rooms show names and severity; empty rooms say Empty. Only changed rooms are outlined.
 
 Statistics, counts by severity, arrival-order records and full Java output are under Details. Test 10 additionally reveals the actual Java search and peek results. Before/After changes the displayed snapshot and clearly labels the starting state. All ten scenarios passed through the revised browser interface. Java logic and the editable workspace are preserved.
+
+## Final accuracy checks
+
+Normal next-patient admission validates the room, then removes the heap head with poll: O(log n). getNextPatient is O(log n), peek is O(1), and registration is O(log n). Direct/selected admission has no queue search. Explicitly admitting a non-head waiting patient uses remove(Object): O(n). Sorted queue display costs O(n log n) and does not mutate the live queue. Room access is O(1); HashMap lookup is average O(1).
+
+Rejected registration now leaves its arrival counter unchanged. EDVerification independently checks severity ordering, equal-level FIFO, identical timestamps, failed-operation state preservation, selected-patient tracking, duplicate IDs, and all ten scenarios. Vercel runs these checks during deployment.
+
+The sample constructor/IDs in the assignment are examples; our code explicitly supplies severity, arrival timestamp, and sequence. The demo uses simulated arrival times for repeatable recording. No requirement clearly mandates a stack or separate tree. The current website's video still needs to be recorded with your explanation; recording controls alone do not satisfy the 30% video deliverable. See RECORDING-GUIDE.md.

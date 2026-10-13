@@ -4,7 +4,7 @@ WORKDIR /app
 COPY src ./src
 RUN mkdir out && javac --release 17 -d out src/*.java
 COPY data ./data
-RUN java -cp out EDProgram
+RUN java -cp out EDProgram && java -cp out EDVerification
 
 FROM eclipse-temurin:21-jdk
 WORKDIR /app
