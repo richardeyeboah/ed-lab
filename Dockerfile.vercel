@@ -1,0 +1,17 @@
+# Vercel builds this container so the website executes real Java on deployment.
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /app
+COPY src ./src
+RUN mkdir out && javac --release 17 -d out src/*.java
+COPY data ./data
+RUN java -cp out EDProgram
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/out ./out
+COPY src ./src
+COPY web ./web
+COPY data ./data
+ENV PORT=80
+EXPOSE 80
+CMD ["java", "-Xmx128m", "-cp", "out", "WebsiteServer"]
